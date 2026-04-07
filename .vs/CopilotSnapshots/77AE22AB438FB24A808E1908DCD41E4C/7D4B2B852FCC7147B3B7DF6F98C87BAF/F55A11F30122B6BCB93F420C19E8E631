@@ -1,7 +1,0 @@
-﻿namespace Backend.Domain.Entities;
-
-public class AppSetting
-{
-    public int Id { get; set; }
-    public int SlideshowDurationSeconds { get; set; }
-}

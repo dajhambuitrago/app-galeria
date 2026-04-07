@@ -1,3 +1,0 @@
-﻿namespace Backend.Application.DTOs;
-
-public record SlideshowDto(int SlideshowDurationSeconds, int TotalItems, string EffectiveOrder, List<MediaDto> Items);

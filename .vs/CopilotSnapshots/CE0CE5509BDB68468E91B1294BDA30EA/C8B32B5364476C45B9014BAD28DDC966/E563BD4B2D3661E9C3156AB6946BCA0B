@@ -1,0 +1,110 @@
+﻿<script setup lang="ts">
+import type { MediaDto } from '@/types/api'
+
+defineProps<{
+  item: MediaDto | null
+  isPlaying: boolean
+}>()
+
+const emit = defineEmits<{
+  close: []
+  next: []
+  prev: []
+  togglePlay: []
+}>()
+</script>
+
+<template>
+  <Transition name="lightbox">
+    <div v-if="item" class="overlay" @click.self="emit('close')">
+      <div class="dialog">
+        <div class="actions">
+          <button @click="emit('prev')">◀</button>
+          <button @click="emit('togglePlay')">{{ isPlaying ? 'Pausar' : 'Reproducir' }}</button>
+          <button @click="emit('next')">▶</button>
+          <button @click="emit('close')">Cerrar</button>
+        </div>
+
+        <div class="viewer">
+          <img v-if="item.type === 1" :src="item.url" :alt="item.title" />
+          <video v-else :src="item.url" controls autoplay />
+        </div>
+
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.categoryName }} · {{ item.type === 1 ? 'Imagen' : 'Video' }}</p>
+      </div>
+    </div>
+  </Transition>
+</template>
+
+<style scoped>
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 1000;
+}
+
+.dialog {
+  width: min(980px, 100%);
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px;
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.viewer {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.viewer img,
+.viewer video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.lightbox-enter-active,
+.lightbox-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.lightbox-enter-from,
+.lightbox-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 640px) {
+  .overlay {
+    padding: 8px;
+  }
+
+  .dialog {
+    padding: 10px;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .actions button {
+    flex: 1 1 calc(50% - 8px);
+  }
+}
+</style>

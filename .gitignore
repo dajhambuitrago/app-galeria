@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+VSWorkspaceState.json
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*

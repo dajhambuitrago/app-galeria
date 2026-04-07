@@ -1,0 +1,69 @@
+﻿using Backend.Application.Features.Media.Commands;
+using Backend.Application.Features.Media.Queries;
+using Backend.Domain.Enums;
+using Backend.WebAPI.Extensions;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Backend.WebAPI.Controllers;
+
+[ApiController]
+[Route("api/media")]
+public class MediaController(IMediator mediator, IWebHostEnvironment env) : ControllerBase
+{
+    [HttpGet]
+    [Authorize(Roles = "User,Admin")]
+    public async Task<IActionResult> Filter([FromQuery] string? category, [FromQuery] MediaType? type, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetMediaByFilterQuery(category, type), cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPost("upload")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Upload(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file.Length == 0)
+        {
+            return BadRequest(new { error = "Archivo vacío." });
+        }
+
+        var uploadsFolder = Path.Combine(env.WebRootPath ?? "wwwroot", "media", "uploads");
+        Directory.CreateDirectory(uploadsFolder);
+
+        var extension = Path.GetExtension(file.FileName);
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var filePath = Path.Combine(uploadsFolder, fileName);
+
+        await using var stream = System.IO.File.Create(filePath);
+        await file.CopyToAsync(stream, cancellationToken);
+
+        var url = $"/media/uploads/{fileName}";
+        return Ok(new { url });
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Create(CreateMediaCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Update(Guid id, UpdateMediaCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { Id = id }, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new DeleteMediaCommand(id), cancellationToken);
+        return this.ToActionResult(result);
+    }
+}

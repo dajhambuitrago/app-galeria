@@ -1,0 +1,224 @@
+﻿<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { getCategories, getMedia, getSlideshow, login } from '@/services/api'
+import type { CategoryDto, MediaDto, SlideshowDto } from '@/types/api'
+import MediaLightbox from '@/components/MediaLightbox.vue'
+import { useSlideshowPlayer } from '@/composables/useSlideshowPlayer'
+
+const email = ref('admin@appgaleria.local')
+const password = ref('Admin123!')
+const token = ref(localStorage.getItem('appgaleria_token') ?? '')
+const selectedCategory = ref('')
+const categories = ref<CategoryDto[]>([])
+const mediaItems = ref<MediaDto[]>([])
+const slideshow = ref<SlideshowDto | null>(null)
+const error = ref('')
+const loading = ref(false)
+
+const isAuthenticated = computed(() => !!token.value)
+const slideshowDurationSeconds = computed(() => slideshow.value?.slideshowDurationSeconds ?? 8)
+
+const {
+  activeItem,
+  isPlaying,
+  openItem,
+  closeViewer,
+  nextItem,
+  prevItem,
+  togglePlay,
+  syncWithMediaItems,
+  dispose,
+} = useSlideshowPlayer(mediaItems, slideshowDurationSeconds)
+
+async function handleLogin() {
+  try {
+    loading.value = true
+    error.value = ''
+    const response = await login(email.value, password.value)
+    token.value = response.token
+    localStorage.setItem('appgaleria_token', response.token)
+    await loadInitialData()
+  } catch (e) {
+    error.value = `No se pudo iniciar sesión: ${String(e)}`
+  } finally {
+    loading.value = false
+  }
+}
+
+function logout() {
+  closeViewer()
+  token.value = ''
+  localStorage.removeItem('appgaleria_token')
+  categories.value = []
+  mediaItems.value = []
+  slideshow.value = null
+}
+
+async function loadInitialData() {
+  if (!token.value) return
+
+  try {
+    error.value = ''
+    const [categoryData, slideshowData] = await Promise.all([
+      getCategories(token.value),
+      getSlideshow(token.value),
+    ])
+
+    categories.value = categoryData
+    slideshow.value = slideshowData
+    await loadMedia()
+  } catch (e) {
+    error.value = `No se pudo cargar la galería: ${String(e)}`
+    throw e
+  }
+}
+
+async function loadMedia() {
+  if (!token.value) return
+
+  try {
+    error.value = ''
+    mediaItems.value = await getMedia(token.value, selectedCategory.value || undefined)
+    syncWithMediaItems()
+  } catch (e) {
+    mediaItems.value = []
+    error.value = `No se pudo cargar el contenido multimedia: ${String(e)}`
+  }
+}
+
+onMounted(async () => {
+  if (token.value) {
+    try {
+      await loadInitialData()
+    } catch {
+      logout()
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  dispose()
+})
+</script>
+
+<template>
+  <main>
+    <h1>appGaleria</h1>
+
+    <section v-if="!isAuthenticated" class="card">
+      <h2>Login</h2>
+      <input v-model="email" type="email" placeholder="Correo" />
+      <input v-model="password" type="password" placeholder="Contraseña" />
+      <button :disabled="loading" @click="handleLogin">Entrar</button>
+    </section>
+
+    <section v-else class="card">
+      <div class="row">
+        <h2>Galería</h2>
+        <button @click="logout">Salir</button>
+      </div>
+
+      <div class="row">
+        <label>Categoría:</label>
+        <select v-model="selectedCategory" @change="loadMedia">
+          <option value="">Todas</option>
+          <option v-for="c in categories" :key="c.id" :value="c.name">{{ c.name }}</option>
+        </select>
+      </div>
+
+      <p v-if="slideshow">
+        Slideshow: {{ slideshow.slideshowDurationSeconds }}s · {{ slideshow.totalItems }} items ·
+        {{ slideshow.effectiveOrder }}
+      </p>
+
+      <p v-if="mediaItems.length === 0">No hay contenido multimedia para mostrar.</p>
+
+      <div class="grid">
+        <article v-for="(item, index) in mediaItems" :key="item.id" class="item" @click="openItem(index)">
+          <div class="preview">
+            <img v-if="item.type === 1" :src="item.url" :alt="item.title" loading="lazy" />
+            <video v-else :src="item.url" controls preload="metadata" />
+          </div>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.categoryName }} · {{ item.type === 1 ? 'Imagen' : 'Video' }}</p>
+          <a :href="item.url" target="_blank" rel="noreferrer" @click.stop>Abrir</a>
+        </article>
+      </div>
+    </section>
+
+    <p v-if="error" class="error">{{ error }}</p>
+
+    <MediaLightbox
+      :item="activeItem"
+      :is-playing="isPlaying"
+      @close="closeViewer"
+      @next="nextItem"
+      @prev="prevItem"
+      @toggle-play="togglePlay"
+    />
+  </main>
+</template>
+
+<style scoped>
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  font-family: Arial, sans-serif;
+}
+
+.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+input,
+select,
+button {
+  padding: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.item {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #f4f4f4;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.preview img,
+.preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.error {
+  color: #c0392b;
+  margin-top: 12px;
+}
+</style>

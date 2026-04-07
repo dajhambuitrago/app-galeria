@@ -1,0 +1,214 @@
+using Backend.Domain.Entities;
+using Backend.Domain.Enums;
+using Backend.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+namespace Backend.Infrastructure.Identity;
+
+/// <summary>
+/// Inicializa datos base de identidad y contenido.
+/// </summary>
+public static class IdentitySeeder
+{
+    /// <summary>
+    /// Ejecuta el seeding de roles, admin, categorías y medios.
+    /// </summary>
+    public static async Task SeedAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        await context.Database.MigrateAsync();
+
+        var roles = new[] { "Admin", "User" };
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+            }
+        }
+
+        var adminEmail = "admin@appgaleria.local";
+        var admin = await userManager.FindByEmailAsync(adminEmail);
+        if (admin is null)
+        {
+            admin = new ApplicationUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                EmailConfirmed = true
+            };
+
+            await userManager.CreateAsync(admin, "Admin123!");
+            await userManager.AddToRoleAsync(admin, "Admin");
+        }
+
+        if (!await context.Categories.AnyAsync())
+        {
+            context.Categories.AddRange(
+                new Category { Id = Guid.NewGuid(), Name = "Hoteles" },
+                new Category { Id = Guid.NewGuid(), Name = "Restaurantes" },
+                new Category { Id = Guid.NewGuid(), Name = "Parques" },
+                new Category { Id = Guid.NewGuid(), Name = "Animales" },
+                new Category { Id = Guid.NewGuid(), Name = "Comida" });
+
+            await context.SaveChangesAsync();
+        }
+
+        var hoteles = await context.Categories.FirstAsync(x => x.Name == "Hoteles");
+        var restaurantes = await context.Categories.FirstAsync(x => x.Name == "Restaurantes");
+        var parques = await context.Categories.FirstAsync(x => x.Name == "Parques");
+        var animales = await context.Categories.FirstAsync(x => x.Name == "Animales");
+        var comida = await context.Categories.FirstAsync(x => x.Name == "Comida");
+
+        if (await context.MediaItems.AnyAsync())
+        {
+            return;
+        }
+
+        // Agrega un item multimedia de ejemplo en la categoría indicada.
+        void AddSeedMedia(string title, string url, MediaType type, Guid categoryId)
+        {
+            context.MediaItems.Add(new MediaItem
+            {
+                Id = Guid.NewGuid(),
+                Title = title,
+                Url = url,
+                Type = type,
+                CategoryId = categoryId
+            });
+        }
+
+        AddSeedMedia(
+            "Hotel Vista Mar",
+            "/media/hoteles/hotel-1.svg",
+            MediaType.Image,
+            hoteles.Id);
+
+        AddSeedMedia(
+            "Lobby de lujo",
+            "/media/hoteles/hotel-2.svg",
+            MediaType.Image,
+            hoteles.Id);
+
+        AddSeedMedia(
+            "Suite panorámica",
+            "/media/hoteles/hotel-3.svg",
+            MediaType.Image,
+            hoteles.Id);
+
+        AddSeedMedia(
+            "Recorrido hotel",
+            "/media/videos/sample-5s.mp4",
+            MediaType.Video,
+            hoteles.Id);
+
+        AddSeedMedia(
+            "Restaurante Terraza",
+            "/media/restaurantes/restaurante-1.svg",
+            MediaType.Image,
+            restaurantes.Id);
+
+        AddSeedMedia(
+            "Cena gourmet",
+            "/media/restaurantes/restaurante-2.svg",
+            MediaType.Image,
+            restaurantes.Id);
+
+        AddSeedMedia(
+            "Café de especialidad",
+            "/media/restaurantes/restaurante-3.svg",
+            MediaType.Image,
+            restaurantes.Id);
+
+        AddSeedMedia(
+            "Video experiencia gastronómica",
+            "/media/videos/sample-10s.mp4",
+            MediaType.Video,
+            restaurantes.Id);
+
+        AddSeedMedia(
+            "Parque Central",
+            "/media/parques/parque-1.svg",
+            MediaType.Image,
+            parques.Id);
+
+        AddSeedMedia(
+            "Sendero verde",
+            "/media/parques/parque-2.svg",
+            MediaType.Image,
+            parques.Id);
+
+        AddSeedMedia(
+            "Lago y naturaleza",
+            "/media/parques/parque-3.svg",
+            MediaType.Image,
+            parques.Id);
+
+        AddSeedMedia(
+            "Video promocional destino",
+            "/media/videos/sample-15s.mp4",
+            MediaType.Video,
+            parques.Id);
+
+        AddSeedMedia(
+            "Safari de aventura",
+            "/media/animales/animales-1.png",
+            MediaType.Image,
+            animales.Id);
+
+        AddSeedMedia(
+            "Vida salvaje",
+            "/media/animales/animales-2.png",
+            MediaType.Image,
+            animales.Id);
+
+        AddSeedMedia(
+            "Fauna exótica",
+            "/media/animales/animales-3.png",
+            MediaType.Image,
+            animales.Id);
+
+        AddSeedMedia(
+            "Video documental de animales",
+            "/media/videos/sample-20s.mp4",
+            MediaType.Video,
+            animales.Id);
+
+        AddSeedMedia(
+            "Plato típico",
+            "/media/comida/comida-1.svg",
+            MediaType.Image,
+            comida.Id);
+
+        AddSeedMedia(
+            "Delicias locales",
+            "/media/comida/comida-2.svg",
+            MediaType.Image,
+            comida.Id);
+
+        AddSeedMedia(
+            "Gastronomía internacional",
+            "/media/comida/comida-3.svg",
+            MediaType.Image,
+            comida.Id);
+
+        AddSeedMedia(
+            "Video receta de cocina",
+            "/media/videos/sample-10s.mp4",
+            MediaType.Video,
+            comida.Id);
+
+        if (!await context.AppSettings.AnyAsync())
+        {
+            context.AppSettings.Add(new AppSetting { SlideshowDurationSeconds = 8 });
+        }
+
+        await context.SaveChangesAsync();
+    }
+}

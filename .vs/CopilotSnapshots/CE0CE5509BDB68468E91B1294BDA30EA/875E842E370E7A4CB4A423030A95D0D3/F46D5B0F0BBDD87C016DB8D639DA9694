@@ -1,0 +1,12 @@
+﻿using Backend.Application.Abstractions.Repositories;
+using Backend.Domain.Entities;
+using Backend.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace Backend.Infrastructure.Repositories;
+
+public class SettingRepository(ApplicationDbContext dbContext) : ISettingRepository
+{
+    public Task<AppSetting?> GetAsync(CancellationToken cancellationToken) =>
+        dbContext.AppSettings.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+}

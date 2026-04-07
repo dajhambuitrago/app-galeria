@@ -1,0 +1,62 @@
+﻿using AutoMapper;
+using Backend.Application.Abstractions.Repositories;
+using Backend.Application.DTOs;
+using Backend.Domain.Common;
+using Backend.Domain.Enums;
+using MediatR;
+
+namespace Backend.Application.Features.Slideshow.Queries;
+
+public record GetSelectedSlideshowQuery(List<Guid> MediaIds, SlideshowOrder Order, bool PreserveSelectionOrder) : IRequest<Result<SlideshowDto>>;
+
+public class GetSelectedSlideshowQueryHandler(
+    ISettingRepository settingRepository,
+    IMediaRepository mediaRepository,
+    IMapper mapper) : IRequestHandler<GetSelectedSlideshowQuery, Result<SlideshowDto>>
+{
+    public async Task<Result<SlideshowDto>> Handle(GetSelectedSlideshowQuery request, CancellationToken cancellationToken)
+    {
+        if (request.MediaIds is null || request.MediaIds.Count == 0)
+        {
+            return Result<SlideshowDto>.Failure("Debes enviar al menos un mediaId.");
+        }
+
+        var settings = await settingRepository.GetAsync(cancellationToken);
+        if (settings is null)
+        {
+            return Result<SlideshowDto>.Failure("Configuración no encontrada.");
+        }
+
+        var items = await mediaRepository.GetByIdsAsync(request.MediaIds, cancellationToken);
+        string effectiveOrder;
+
+        if (request.PreserveSelectionOrder)
+        {
+            var positionMap = request.MediaIds
+                .Select((id, index) => new { id, index })
+                .GroupBy(x => x.id)
+                .ToDictionary(x => x.Key, x => x.First().index);
+
+            items = items.OrderBy(x => positionMap.TryGetValue(x.Id, out var idx) ? idx : int.MaxValue).ToList();
+            effectiveOrder = "Selection";
+        }
+        else
+        {
+            items = request.Order switch
+            {
+                SlideshowOrder.TitleDesc => items.OrderByDescending(x => x.Title).ToList(),
+                SlideshowOrder.Random => items.OrderBy(_ => Guid.NewGuid()).ToList(),
+                _ => items.OrderBy(x => x.Title).ToList()
+            };
+            effectiveOrder = request.Order.ToString();
+        }
+
+        var media = mapper.Map<List<MediaDto>>(items);
+        var result = new SlideshowDto(
+            settings.SlideshowDurationSeconds,
+            media.Count,
+            effectiveOrder,
+            media);
+        return Result<SlideshowDto>.Success(result);
+    }
+}

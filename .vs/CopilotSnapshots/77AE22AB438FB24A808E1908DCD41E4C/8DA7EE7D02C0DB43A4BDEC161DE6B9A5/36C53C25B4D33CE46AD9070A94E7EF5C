@@ -1,0 +1,39 @@
+﻿using Backend.Application.Abstractions.Repositories;
+using Backend.Domain.Common;
+using Backend.Domain.Entities;
+using FluentValidation;
+using MediatR;
+
+namespace Backend.Application.Features.Categories.Commands;
+
+public record CreateCategoryCommand(string Name) : IRequest<Result<Guid>>;
+
+public class CreateCategoryCommandValidator : AbstractValidator<CreateCategoryCommand>
+{
+    public CreateCategoryCommandValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(50);
+    }
+}
+
+public class CreateCategoryCommandHandler(ICategoryRepository repository, IValidator<CreateCategoryCommand> validator) : IRequestHandler<CreateCategoryCommand, Result<Guid>>
+{
+    public async Task<Result<Guid>> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
+    {
+        var validation = await validator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result<Guid>.Failure(validation.Errors.First().ErrorMessage);
+        }
+
+        var existing = await repository.GetByNameAsync(request.Name, cancellationToken);
+        if (existing is not null)
+        {
+            return Result<Guid>.Failure("La categoría ya existe.");
+        }
+
+        var category = new Category { Id = Guid.NewGuid(), Name = request.Name.Trim() };
+        await repository.AddAsync(category, cancellationToken);
+        return Result<Guid>.Success(category.Id);
+    }
+}

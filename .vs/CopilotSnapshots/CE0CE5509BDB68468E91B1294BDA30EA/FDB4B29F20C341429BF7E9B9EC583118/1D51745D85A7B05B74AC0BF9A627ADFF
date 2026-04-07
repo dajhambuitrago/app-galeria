@@ -1,0 +1,36 @@
+﻿using System.Security.Claims;
+using Backend.Application.Features.Slideshow.Queries;
+using Backend.Domain.Enums;
+using Backend.WebAPI.Contracts.Slideshow;
+using Backend.WebAPI.Extensions;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Backend.WebAPI.Controllers;
+
+[ApiController]
+[Route("api/slideshow")]
+[Authorize(Roles = "User,Admin")]
+public class SlideshowController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IActionResult> Get(
+        [FromQuery] bool onlyFavorites = false,
+        [FromQuery] string? category = null,
+        [FromQuery] MediaType? type = null,
+        [FromQuery] SlideshowOrder order = SlideshowOrder.TitleAsc,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = onlyFavorites ? User.FindFirstValue(ClaimTypes.NameIdentifier) : null;
+        var result = await mediator.Send(new GetSlideshowQuery(userId, onlyFavorites, category, type, order), cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPost("selected")]
+    public async Task<IActionResult> GetSelected([FromBody] SelectedSlideshowRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetSelectedSlideshowQuery(request.MediaIds, request.Order), cancellationToken);
+        return this.ToActionResult(result);
+    }
+}

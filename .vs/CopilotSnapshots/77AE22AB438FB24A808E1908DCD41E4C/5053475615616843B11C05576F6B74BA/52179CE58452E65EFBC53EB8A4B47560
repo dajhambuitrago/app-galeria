@@ -1,0 +1,20 @@
+﻿using AutoMapper;
+using Backend.Application.DTOs;
+using Backend.Domain.Entities;
+
+namespace Backend.Application.Mapping;
+
+public class MappingProfile : Profile
+{
+    public MappingProfile()
+    {
+        CreateMap<Category, CategoryDto>();
+        CreateMap<MediaItem, MediaDto>()
+            .ForCtorParam(nameof(MediaDto.CategoryName), opt => opt.MapFrom(src => src.Category != null ? src.Category.Name : string.Empty))
+            .ForCtorParam(nameof(MediaDto.Description), opt => opt.MapFrom(src => src.Description ?? string.Empty));
+        CreateMap<Favorite, FavoriteDto>()
+            .ForCtorParam(nameof(FavoriteDto.MediaItemId), opt => opt.MapFrom(src => src.MediaItemId))
+            .ForCtorParam(nameof(FavoriteDto.Title), opt => opt.MapFrom(src => src.MediaItem != null ? src.MediaItem.Title : string.Empty))
+            .ForCtorParam(nameof(FavoriteDto.Url), opt => opt.MapFrom(src => src.MediaItem != null ? src.MediaItem.Url : string.Empty));
+    }
+}

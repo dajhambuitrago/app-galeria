@@ -1,0 +1,59 @@
+﻿using Backend.Domain.Entities;
+using Backend.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+namespace Backend.Infrastructure.Identity;
+
+public static class IdentitySeeder
+{
+    public static async Task SeedAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        await context.Database.EnsureCreatedAsync();
+
+        var roles = new[] { "Admin", "User" };
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+            }
+        }
+
+        var adminEmail = "admin@appgaleria.local";
+        var admin = await userManager.FindByEmailAsync(adminEmail);
+        if (admin is null)
+        {
+            admin = new ApplicationUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                EmailConfirmed = true
+            };
+
+            await userManager.CreateAsync(admin, "Admin123!");
+            await userManager.AddToRoleAsync(admin, "Admin");
+        }
+
+        if (!await context.Categories.AnyAsync())
+        {
+            context.Categories.AddRange(
+                new Category { Id = Guid.NewGuid(), Name = "Hoteles" },
+                new Category { Id = Guid.NewGuid(), Name = "Restaurantes" },
+                new Category { Id = Guid.NewGuid(), Name = "Parques" });
+        }
+
+        if (!await context.AppSettings.AnyAsync())
+        {
+            context.AppSettings.Add(new AppSetting { SlideshowDurationSeconds = 8 });
+        }
+
+        await context.SaveChangesAsync();
+    }
+}

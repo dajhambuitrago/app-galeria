@@ -1,0 +1,199 @@
+﻿<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import type { MediaDto } from '@/types/api'
+
+const props = defineProps<{
+  item: MediaDto | null
+  isPlaying: boolean
+}>()
+
+const emit = defineEmits<{
+  close: []
+  next: []
+  prev: []
+  togglePlay: []
+}>()
+
+const zoomScale = ref(1)
+const zoomX = ref(0)
+const zoomY = ref(0)
+const isDragging = ref(false)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+
+const zoomStyle = computed(() => ({
+  transform: `translate(${zoomX.value}px, ${zoomY.value}px) scale(${zoomScale.value})`,
+}))
+
+function resetZoom() {
+  zoomScale.value = 1
+  zoomX.value = 0
+  zoomY.value = 0
+}
+
+function zoomIn() {
+  if (!props.item || props.item.type !== 1) return
+  zoomScale.value = Math.min(3, zoomScale.value + 0.2)
+}
+
+function zoomOut() {
+  if (!props.item || props.item.type !== 1) return
+  const next = Math.max(1, zoomScale.value - 0.2)
+  zoomScale.value = next
+  if (next === 1) {
+    zoomX.value = 0
+    zoomY.value = 0
+  }
+}
+
+function handlePointerDown(event: PointerEvent) {
+  if (!props.item || props.item.type !== 1 || zoomScale.value === 1) return
+  isDragging.value = true
+  dragStartX.value = event.clientX - zoomX.value
+  dragStartY.value = event.clientY - zoomY.value
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if (!isDragging.value) return
+  zoomX.value = event.clientX - dragStartX.value
+  zoomY.value = event.clientY - dragStartY.value
+}
+
+function handlePointerUp() {
+  isDragging.value = false
+}
+
+watch(
+  () => props.item?.id,
+  () => resetZoom(),
+)
+</script>
+
+<template>
+  <Transition name="lightbox">
+    <div v-if="item" class="overlay" @click.self="emit('close')">
+      <div class="dialog card border-0 shadow-lg">
+        <div class="card-body p-3 p-md-4 lightbox-body">
+          <div
+            class="viewer rounded"
+            @pointerdown="handlePointerDown"
+            @pointermove="handlePointerMove"
+            @pointerup="handlePointerUp"
+            @pointerleave="handlePointerUp"
+            @dblclick="resetZoom"
+          >
+            <img
+              v-if="item.type === 1"
+              :src="item.url"
+              :alt="item.title"
+              class="zoom-media"
+              :style="zoomStyle"
+              draggable="false"
+            />
+            <video v-else :src="item.url" controls autoplay />
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
+            <button class="btn btn-outline-secondary btn-sm" @click="emit('prev')">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <button class="btn btn-primary btn-sm" @click="emit('togglePlay')">
+              <i class="bi" :class="isPlaying ? 'bi-pause-fill' : 'bi-play-fill'"></i>
+              {{ isPlaying ? 'Pausar' : 'Reproducir' }}
+            </button>
+            <button
+              v-if="item?.type === 1"
+              class="btn btn-outline-secondary btn-sm"
+              @click="zoomOut"
+            >
+              <i class="bi bi-zoom-out"></i>
+            </button>
+            <button
+              v-if="item?.type === 1"
+              class="btn btn-outline-secondary btn-sm"
+              @click="zoomIn"
+            >
+              <i class="bi bi-zoom-in"></i>
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @click="emit('next')">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+            <button class="btn btn-outline-danger btn-sm" @click="emit('close')">Cerrar</button>
+          </div>
+
+          <h3 class="h5 mt-3 mb-1">{{ item.title }}</h3>
+          <p class="text-secondary mb-2">{{ item.categoryName }} · {{ item.type === 1 ? 'Imagen' : 'Video' }}</p>
+          <p v-if="item.description" class="text-secondary mb-0">{{ item.description }}</p>
+        </div>
+      </div>
+    </div>
+  </Transition>
+</template>
+
+<style scoped>
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 1050;
+}
+
+.dialog {
+  width: min(1100px, 100%);
+  height: min(92vh, 960px);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.lightbox-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.viewer {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #111;
+  overflow: hidden;
+}
+
+.viewer img,
+.viewer video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zoom-media {
+  cursor: grab;
+  transition: transform 0.08s ease;
+  user-select: none;
+  touch-action: none;
+}
+
+.zoom-media:active {
+  cursor: grabbing;
+}
+
+.lightbox-enter-active,
+.lightbox-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.lightbox-enter-from,
+.lightbox-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 640px) {
+  .overlay {
+    padding: 8px;
+  }
+}
+</style>

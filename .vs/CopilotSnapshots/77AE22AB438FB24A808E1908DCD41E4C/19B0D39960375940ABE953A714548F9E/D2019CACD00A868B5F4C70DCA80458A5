@@ -1,0 +1,39 @@
+﻿using System.Security.Claims;
+using Backend.Application.Features.Favorites.Commands;
+using Backend.Application.Features.Favorites.Queries;
+using Backend.WebAPI.Extensions;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Backend.WebAPI.Controllers;
+
+[ApiController]
+[Route("api/favorites")]
+[Authorize(Roles = "User")]
+public class FavoritesController(IMediator mediator) : ControllerBase
+{
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMyFavorites(CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await mediator.Send(new GetMyFavoritesQuery(userId), cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPost("{mediaId:guid}")]
+    public async Task<IActionResult> Add(Guid mediaId, CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await mediator.Send(new AddFavoriteCommand(userId, mediaId), cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpDelete("{mediaId:guid}")]
+    public async Task<IActionResult> Remove(Guid mediaId, CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await mediator.Send(new RemoveFavoriteCommand(userId, mediaId), cancellationToken);
+        return this.ToActionResult(result);
+    }
+}

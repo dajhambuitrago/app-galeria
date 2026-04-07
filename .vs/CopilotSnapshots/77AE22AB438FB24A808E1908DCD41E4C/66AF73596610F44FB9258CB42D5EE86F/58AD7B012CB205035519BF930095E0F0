@@ -1,0 +1,146 @@
+﻿import type {
+  AuthResponseDto,
+  CategoryDto,
+  FavoriteDto,
+  MediaDto,
+  SettingDto,
+  SlideshowDto,
+} from '@/types/api'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5241'
+
+async function request<T>(path: string, options?: RequestInit, token?: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
+  })
+
+  const contentType = response.headers.get('content-type') ?? ''
+  const isJson = contentType.includes('application/json')
+
+  if (!response.ok) {
+    if (isJson) {
+      const errorBody = (await response.json()) as { error?: string }
+      throw new Error(errorBody.error || `HTTP ${response.status}`)
+    }
+
+    const errorText = await response.text()
+    throw new Error(errorText || `HTTP ${response.status}`)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  if (!isJson) {
+    const text = await response.text()
+    return text as T
+  }
+
+  return (await response.json()) as T
+}
+
+export async function login(email: string, password: string): Promise<AuthResponseDto> {
+  return request<AuthResponseDto>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function register(email: string, password: string): Promise<AuthResponseDto> {
+  return request<AuthResponseDto>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function getCategories(token: string): Promise<CategoryDto[]> {
+  return request<CategoryDto[]>('/api/categories', undefined, token)
+}
+
+export async function createCategory(token: string, name: string): Promise<string> {
+  return request<string>('/api/categories', { method: 'POST', body: JSON.stringify({ name }) }, token)
+}
+
+export async function updateCategory(token: string, id: string, name: string): Promise<void> {
+  await request<void>(`/api/categories/${id}`, { method: 'PUT', body: JSON.stringify({ id, name }) }, token)
+}
+
+export async function deleteCategory(token: string, id: string): Promise<void> {
+  await request<void>(`/api/categories/${id}`, { method: 'DELETE' }, token)
+}
+
+export async function getMedia(token: string, category?: string): Promise<MediaDto[]> {
+  const query = category ? `?category=${encodeURIComponent(category)}` : ''
+  return request<MediaDto[]>(`/api/media${query}`, undefined, token)
+}
+
+export async function createMedia(
+  token: string,
+  payload: { title: string; url: string; description: string; type: number; categoryId: string },
+): Promise<string> {
+  return request<string>('/api/media', { method: 'POST', body: JSON.stringify(payload) }, token)
+}
+
+export async function updateMedia(
+  token: string,
+  payload: { id: string; title: string; url: string; description: string; type: number; categoryId: string },
+): Promise<void> {
+  await request<void>(`/api/media/${payload.id}`, { method: 'PUT', body: JSON.stringify(payload) }, token)
+}
+
+export async function deleteMedia(token: string, id: string): Promise<void> {
+  await request<void>(`/api/media/${id}`, { method: 'DELETE' }, token)
+}
+
+export async function getFavorites(token: string): Promise<FavoriteDto[]> {
+  return request<FavoriteDto[]>('/api/favorites/me', undefined, token)
+}
+
+export async function addFavorite(token: string, mediaId: string): Promise<void> {
+  await request<void>(`/api/favorites/${mediaId}`, { method: 'POST' }, token)
+}
+
+export async function removeFavorite(token: string, mediaId: string): Promise<void> {
+  await request<void>(`/api/favorites/${mediaId}`, { method: 'DELETE' }, token)
+}
+
+export async function getSlideshow(token: string, onlyFavorites = false): Promise<SlideshowDto> {
+  const query = onlyFavorites ? '?onlyFavorites=true' : ''
+  return request<SlideshowDto>(`/api/slideshow${query}`, undefined, token)
+}
+
+export async function getSlideshowDuration(token: string): Promise<SettingDto> {
+  return request<SettingDto>('/api/settings/slideshow-duration', undefined, token)
+}
+
+export async function updateSlideshowDuration(token: string, seconds: number): Promise<SettingDto> {
+  return request<SettingDto>('/api/settings/slideshow-duration', {
+    method: 'PUT',
+    body: JSON.stringify({ slideshowDurationSeconds: seconds }),
+  }, token)
+}
+
+export async function uploadMediaFile(token: string, file: File): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_URL}/api/media/upload`, {
+    method: 'POST',
+    body: formData,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!response.ok) {
+    const errorBody = contentType.includes('application/json') ? await response.json() : null
+    throw new Error(errorBody?.error || `HTTP ${response.status}`)
+  }
+
+  const body = (await response.json()) as { url: string }
+  return body.url
+}

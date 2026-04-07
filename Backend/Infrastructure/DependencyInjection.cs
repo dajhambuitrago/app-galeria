@@ -1,0 +1,72 @@
+using System.Text;
+using Backend.Application.Abstractions.Repositories;
+using Backend.Application.Abstractions.Security;
+using Backend.Infrastructure.Identity;
+using Backend.Infrastructure.Persistence;
+using Backend.Infrastructure.Repositories;
+using Backend.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
+
+namespace Backend.Infrastructure;
+
+/// <summary>
+/// Registra los servicios de infraestructura en el contenedor DI.
+/// </summary>
+public static class DependencyInjection
+{
+    /// <summary>
+    /// Agrega persistencia, identidad y servicios auxiliares.
+    /// </summary>
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseNpgsql(
+                configuration.GetConnectionString("DefaultConnection")
+                ?? "Host=localhost;Port=5432;Database=appgaleria;Username=postgres;Password=12345"));
+
+        services.AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+                options.Password.RequireDigit = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireNonAlphanumeric = false;
+            })
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddSignInManager();
+
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = configuration["Jwt:Issuer"],
+                    ValidAudience = configuration["Jwt:Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"]!))
+                };
+            });
+
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+            options.AddPolicy("UserOnly", policy => policy.RequireRole("User"));
+        });
+
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<IMediaRepository, MediaRepository>();
+        services.AddScoped<IFavoriteRepository, FavoriteRepository>();
+        services.AddScoped<ISettingRepository, SettingRepository>();
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+        return services;
+    }
+}

@@ -1,0 +1,115 @@
+# appGaleria
+
+## 📌 Descripción del proyecto
+Aplicación web tipo galería para gestionar y visualizar imágenes y videos con categorías, vista ampliada y modo de presentación automática. Incluye autenticación básica, administración de contenido y favoritos por usuario.
+
+## 🧱 Arquitectura utilizada
+**Frontend (Vue 3)**
+- `views`: pantallas principales (`GalleryView`, `AdminView`).
+- `components`: UI reutilizable (`MediaLightbox`).
+- `composables`: lógica compartida (`useSlideshowPlayer`).
+- `services`: capa de consumo de API.
+- `types`: DTOs y contratos del frontend.
+
+**Backend (ASP.NET Core)**
+- `WebAPI`: controladores HTTP.
+- `Application`: CQRS, DTOs, validaciones y lógica de negocio.
+- `Domain`: entidades y enums.
+- `Infrastructure`: persistencia, repositorios e identidad.
+
+## 🔄 Flujo de la aplicación
+1. **Frontend** consume la API mediante `services` y controla el estado en `views`.
+2. **WebAPI** expone endpoints seguros y delega en **Application** vía MediatR.
+3. **Application** aplica CQRS: comandos para escritura y queries para lectura.
+4. **Domain** define el modelo de negocio.
+5. **Infrastructure** resuelve persistencia (EF Core) y servicios de identidad.
+
+CQRS con MediatR permite separar lectura/escritura, simplificar validaciones y mantener la lógica de negocio desacoplada de la capa HTTP.
+
+## 🚀 Tecnologías usadas
+- Vue 3 + TypeScript
+- Bootstrap + Bootstrap Icons
+- ASP.NET Core + MediatR + FluentValidation
+- PostgreSQL + EF Core
+- JWT para autenticación
+
+## ✅ Requisitos previos
+- .NET SDK
+- Node.js + npm
+- PostgreSQL
+
+## ⚙️ Instalación y ejecución
+
+### Backend
+1. Crear la base de datos `appgaleria_dev` en PostgreSQL.
+2. Verificar conexión en `Backend/appsettings.Development.json`.
+3. Ejecutar migraciones y levantar API:
+
+```bash
+cd Backend
+
+dotnet ef database update
+
+dotnet run
+```
+
+> La base de datos se crea y actualiza con migraciones de EF Core; no es necesario un script SQL adicional.
+
+### Frontend
+```bash
+cd frontend
+
+npm install
+
+npm run dev
+```
+
+Si necesitas cambiar la URL de la API, ajusta `VITE_API_BASE_URL` en tu entorno.
+
+## 📂 Estructura del proyecto
+```
+frontend/
+  src/
+    views/
+    components/
+    composables/
+    services/
+    types/
+backend/
+  WebAPI/
+  Application/
+  Domain/
+  Infrastructure/
+```
+
+## 📡 Endpoints principales
+**Auth**
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+
+**Media**
+- `GET /api/media`
+- `POST /api/media`
+- `PUT /api/media/{id}`
+- `DELETE /api/media/{id}`
+- `POST /api/media/upload`
+
+**Categorías**
+- `GET /api/categories`
+- `POST /api/categories`
+- `PUT /api/categories/{id}`
+- `DELETE /api/categories/{id}`
+
+**Favoritos**
+- `GET /api/favorites/me`
+- `POST /api/favorites/{mediaId}`
+- `DELETE /api/favorites/{mediaId}`
+
+**Configuración**
+- `GET /api/settings/slideshow-duration`
+- `PUT /api/settings/slideshow-duration`
+
+
+
+
+

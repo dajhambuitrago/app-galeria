@@ -1,0 +1,13 @@
+﻿using Backend.Domain.Entities;
+using Backend.Domain.Enums;
+
+namespace Backend.Application.Abstractions.Repositories;
+
+public interface IMediaRepository
+{
+    Task<List<MediaItem>> FilterAsync(string? categoryName, MediaType? type, CancellationToken cancellationToken);
+    Task<MediaItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task AddAsync(MediaItem media, CancellationToken cancellationToken);
+    Task UpdateAsync(MediaItem media, CancellationToken cancellationToken);
+    Task DeleteAsync(MediaItem media, CancellationToken cancellationToken);
+}

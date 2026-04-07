@@ -1,0 +1,736 @@
+﻿<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  addFavorite,
+  getCategories,
+  getFavorites,
+  getMedia,
+  getSlideshow,
+  login,
+  register,
+  removeFavorite,
+} from '@/services/api'
+import type { CategoryDto, MediaDto, SlideshowDto } from '@/types/api'
+import MediaLightbox from '@/components/MediaLightbox.vue'
+import { useSlideshowPlayer } from '@/composables/useSlideshowPlayer'
+
+type AuthMode = 'login' | 'register'
+
+const authMode = ref<AuthMode>('login')
+const email = ref('admin@appgaleria.local')
+const password = ref('Admin123!')
+const confirmPassword = ref('')
+const token = ref(localStorage.getItem('appgaleria_token') ?? '')
+const selectedCategory = ref('')
+const searchQuery = ref('')
+
+const categories = ref<CategoryDto[]>([])
+const mediaItems = ref<MediaDto[]>([])
+const slideshow = ref<SlideshowDto | null>(null)
+const error = ref('')
+const loading = ref(false)
+const favoriteIds = ref<Set<string>>(new Set())
+const favoritesEnabled = ref(true)
+
+const isAuthenticated = computed(() => !!token.value)
+const slideshowDurationSeconds = computed(() => slideshow.value?.slideshowDurationSeconds ?? 8)
+const isRegisterMode = computed(() => authMode.value === 'register')
+
+const visibleItems = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return mediaItems.value
+  return mediaItems.value.filter(
+    (x) => x.title.toLowerCase().includes(q) || x.categoryName.toLowerCase().includes(q),
+  )
+})
+
+const {
+  activeItem,
+  isPlaying,
+  openItem,
+  openFirst,
+  closeViewer,
+  nextItem,
+  prevItem,
+  togglePlay,
+  syncWithMediaItems,
+  dispose,
+} = useSlideshowPlayer(visibleItems, slideshowDurationSeconds)
+
+function switchAuthMode(mode: AuthMode) {
+  authMode.value = mode
+  error.value = ''
+  confirmPassword.value = ''
+}
+
+function selectCategory(name: string) {
+  selectedCategory.value = name
+  void loadMedia()
+}
+
+function startPresentation() {
+  if (visibleItems.value.length === 0) return
+  openFirst()
+  if (!isPlaying.value) {
+    togglePlay()
+  }
+}
+
+async function handleAuthSubmit() {
+  if (isRegisterMode.value) {
+    await handleRegister()
+    return
+  }
+
+  await handleLogin()
+}
+
+async function handleLogin() {
+  try {
+    loading.value = true
+    error.value = ''
+    const response = await login(email.value, password.value)
+    token.value = response.token
+    localStorage.setItem('appgaleria_token', response.token)
+    await loadInitialData()
+  } catch (e) {
+    error.value = `No se pudo iniciar sesión: ${String(e)}`
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleRegister() {
+  if (password.value !== confirmPassword.value) {
+    error.value = 'Las contraseñas no coinciden.'
+    return
+  }
+
+  try {
+    loading.value = true
+    error.value = ''
+    const response = await register(email.value, password.value)
+    token.value = response.token
+    localStorage.setItem('appgaleria_token', response.token)
+    await loadInitialData()
+  } catch (e) {
+    error.value = `No se pudo registrar: ${String(e)}`
+  } finally {
+    loading.value = false
+  }
+}
+
+function logout() {
+  closeViewer()
+  token.value = ''
+  localStorage.removeItem('appgaleria_token')
+  categories.value = []
+  mediaItems.value = []
+  slideshow.value = null
+  searchQuery.value = ''
+  favoriteIds.value = new Set()
+  favoritesEnabled.value = true
+}
+
+function setFavoriteState(mediaId: string, value: boolean) {
+  const next = new Set(favoriteIds.value)
+  if (value) {
+    next.add(mediaId)
+  } else {
+    next.delete(mediaId)
+  }
+  favoriteIds.value = next
+}
+
+function isFavorite(mediaId: string) {
+  return favoriteIds.value.has(mediaId)
+}
+
+async function toggleFavorite(mediaId: string) {
+  if (!token.value || !favoritesEnabled.value) return
+
+  const current = isFavorite(mediaId)
+  setFavoriteState(mediaId, !current)
+
+  try {
+    if (current) {
+      await removeFavorite(token.value, mediaId)
+    } else {
+      await addFavorite(token.value, mediaId)
+    }
+  } catch (e) {
+    setFavoriteState(mediaId, current)
+    error.value = `No se pudo actualizar favorito: ${String(e)}`
+  }
+}
+
+async function loadFavorites() {
+  if (!token.value) return
+
+  try {
+    const favorites = await getFavorites(token.value)
+    favoriteIds.value = new Set(favorites.map((x) => x.mediaItemId))
+    favoritesEnabled.value = true
+  } catch {
+    favoriteIds.value = new Set()
+    favoritesEnabled.value = false
+  }
+}
+
+async function loadInitialData() {
+  if (!token.value) return
+
+  try {
+    error.value = ''
+    const [categoryData, slideshowData] = await Promise.all([
+      getCategories(token.value),
+      getSlideshow(token.value),
+    ])
+
+    categories.value = categoryData
+    slideshow.value = slideshowData
+
+    await Promise.all([loadMedia(), loadFavorites()])
+  } catch (e) {
+    error.value = `No se pudo cargar la galería: ${String(e)}`
+    throw e
+  }
+}
+
+async function loadMedia() {
+  if (!token.value) return
+
+  try {
+    error.value = ''
+    mediaItems.value = await getMedia(token.value, selectedCategory.value || undefined)
+    syncWithMediaItems()
+  } catch (e) {
+    mediaItems.value = []
+    error.value = `No se pudo cargar el contenido multimedia: ${String(e)}`
+
+    // Agregado para manejar el error de forma más robusta
+    if (e.response && e.response.data && e.response.data.message) {
+      error.value = `Error: ${e.response.data.message}`
+    }
+  }
+}
+
+onMounted(async () => {
+  if (token.value) {
+    try {
+      await loadInitialData()
+    } catch {
+      logout()
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  dispose()
+})
+</script>
+
+<template>
+  <main>
+    <header class="hero">
+      <div>
+        <h1>appGaleria</h1>
+        <p>Explora imágenes y videos por categorías.</p>
+      </div>
+      <button v-if="isAuthenticated" class="ghost-btn" @click="logout">Cerrar sesión</button>
+    </header>
+
+    <Transition name="fade-slide" mode="out-in">
+      <section v-if="!isAuthenticated" key="login" class="login-shell">
+        <div class="login-panel">
+          <div class="auth-switch" role="tablist" aria-label="Modo de autenticación">
+            <button
+              class="auth-tab"
+              :class="{ active: authMode === 'login' }"
+              @click="switchAuthMode('login')"
+            >
+              Iniciar sesión
+            </button>
+            <button
+              class="auth-tab"
+              :class="{ active: authMode === 'register' }"
+              @click="switchAuthMode('register')"
+            >
+              Registrarme
+            </button>
+          </div>
+
+          <p class="login-kicker">Bienvenido</p>
+          <h2>{{ isRegisterMode ? 'Crear cuenta' : 'Iniciar sesión' }}</h2>
+          <p class="login-copy">
+            {{
+              isRegisterMode
+                ? 'Regístrate para guardar tus favoritos y acceder a la galería.'
+                : 'Accede para explorar la galería y usar el modo presentación.'
+            }}
+          </p>
+
+          <form class="login-form" @submit.prevent="handleAuthSubmit">
+            <label>
+              Correo
+              <input v-model="email" type="email" placeholder="tu-correo@ejemplo.com" required />
+            </label>
+            <label>
+              Contraseña
+              <input v-model="password" type="password" placeholder="••••••••" required />
+            </label>
+            <label v-if="isRegisterMode">
+              Confirmar contraseña
+              <input
+                v-model="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                required
+              />
+            </label>
+            <button class="primary-btn" :disabled="loading" type="submit">
+              {{
+                loading
+                  ? isRegisterMode
+                    ? 'Registrando...'
+                    : 'Ingresando...'
+                  : isRegisterMode
+                    ? 'Crear cuenta'
+                    : 'Entrar'
+              }}
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section v-else key="gallery" class="card">
+        <div class="toolbar">
+          <div class="toolbar-title">
+            <h2>Galería</h2>
+            <span>{{ visibleItems.length }} elementos</span>
+          </div>
+
+          <div class="toolbar-actions">
+            <input
+              v-model="searchQuery"
+              class="search"
+              type="search"
+              placeholder="Buscar por título o categoría"
+            />
+            <button class="primary-btn" :disabled="visibleItems.length === 0" @click="startPresentation">
+              Iniciar presentación
+            </button>
+          </div>
+        </div>
+
+        <div class="chip-row">
+          <button class="chip" :class="{ active: selectedCategory === '' }" @click="selectCategory('')">
+            Todas
+          </button>
+          <button
+            v-for="c in categories"
+            :key="c.id"
+            class="chip"
+            :class="{ active: selectedCategory === c.name }"
+            @click="selectCategory(c.name)"
+          >
+            {{ c.name }}
+          </button>
+        </div>
+
+        <p v-if="slideshow" class="muted">
+          Slideshow: {{ slideshow.slideshowDurationSeconds }}s · {{ slideshow.totalItems }} items ·
+          {{ slideshow.effectiveOrder }}
+        </p>
+
+        <p v-if="visibleItems.length === 0" class="empty-state">
+          No hay contenido multimedia que coincida con tu búsqueda.
+        </p>
+
+        <TransitionGroup name="card-fade" tag="div" class="grid">
+          <article
+            v-for="(item, index) in visibleItems"
+            :key="item.id"
+            class="item"
+            @click="openItem(index)"
+          >
+            <div class="preview">
+              <img v-if="item.type === 1" :src="item.url" :alt="item.title" loading="lazy" />
+              <video v-else :src="item.url" controls preload="metadata" />
+            </div>
+            <div class="item-head">
+              <h3>{{ item.title }}</h3>
+              <button
+                v-if="favoritesEnabled"
+                class="fav-btn"
+                :class="{ active: isFavorite(item.id) }"
+                :aria-label="isFavorite(item.id) ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                @click.stop="toggleFavorite(item.id)"
+              >
+                {{ isFavorite(item.id) ? '♥' : '♡' }}
+              </button>
+            </div>
+            <p>{{ item.categoryName }} · {{ item.type === 1 ? 'Imagen' : 'Video' }}</p>
+            <a :href="item.url" target="_blank" rel="noreferrer" @click.stop>Abrir</a>
+          </article>
+        </TransitionGroup>
+      </section>
+    </Transition>
+
+    <Transition name="fade-slide">
+      <p v-if="error" class="error">{{ error }}</p>
+    </Transition>
+
+    <MediaLightbox
+      :item="activeItem"
+      :is-playing="isPlaying"
+      @close="closeViewer"
+      @next="nextItem"
+      @prev="prevItem"
+      @toggle-play="togglePlay"
+    />
+  </main>
+</template>
+
+<style scoped>
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Inter, Arial, sans-serif;
+  color: #1c1f24;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.hero h1 {
+  margin: 0;
+}
+
+.hero p {
+  margin: 4px 0 0;
+  color: #5f6368;
+}
+
+.card {
+  border: 1px solid #e7e9ee;
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.06);
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  min-height: 58vh;
+}
+
+.login-panel {
+  width: min(460px, 100%);
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #dbe3ff;
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 70%);
+  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.14);
+}
+
+.auth-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #cfd7f6;
+  border-radius: 10px;
+  padding: 4px;
+  background: #f4f7ff;
+  margin-bottom: 14px;
+}
+
+.auth-tab {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 600;
+  color: #41527a;
+}
+
+.auth-tab.active {
+  background: #fff;
+  color: #1f56cd;
+  box-shadow: 0 2px 8px rgba(31, 86, 205, 0.15);
+}
+
+.login-kicker {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #2a56c6;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.login-panel h2 {
+  margin: 0;
+}
+
+.login-copy {
+  margin: 8px 0 18px;
+  color: #5f6368;
+}
+
+.login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: #394150;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.toolbar-title h2 {
+  margin: 0;
+}
+
+.toolbar-title span {
+  color: #5f6368;
+  font-size: 0.92rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search {
+  min-width: 280px;
+}
+
+input,
+button {
+  padding: 10px 11px;
+  border-radius: 10px;
+  border: 1px solid #cfd4dd;
+}
+
+input:focus {
+  outline: none;
+  border-color: #6f95f7;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+button {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #f8f9fb;
+}
+
+button:hover {
+  border-color: #9ca7bb;
+}
+
+.primary-btn {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.primary-btn:hover {
+  background: #1f56cd;
+  border-color: #1f56cd;
+}
+
+.primary-btn:disabled {
+  background: #9fb7f8;
+  border-color: #9fb7f8;
+  cursor: not-allowed;
+}
+
+.ghost-btn {
+  background: #fff;
+}
+
+.chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+.chip {
+  white-space: nowrap;
+}
+
+.chip.active {
+  background: #e8f0ff;
+  border-color: #8fb0ff;
+  color: #1849b8;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.item {
+  border: 1px solid #edf0f4;
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: #fff;
+}
+
+.item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #f4f4f4;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.preview img,
+.preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.muted {
+  color: #5f6368;
+}
+
+.empty-state {
+  color: #5f6368;
+  padding: 8px 0;
+}
+
+.error {
+  color: #c0392b;
+  margin-top: 12px;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.card-fade-enter-active,
+.card-fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.card-fade-enter-from,
+.card-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.item-head h3 {
+  margin: 0;
+}
+
+.fav-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid #ffd0d0;
+  color: #c63d3d;
+  background: #fff5f5;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.fav-btn.active {
+  border-color: #ff9e9e;
+  background: #ffe7e7;
+  color: #b91c1c;
+}
+
+.fav-btn:hover {
+  border-color: #ff9e9e;
+}
+
+@media (max-width: 900px) {
+  main {
+    padding: 14px;
+  }
+
+  .search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+  }
+
+  .primary-btn {
+    width: 100%;
+  }
+
+  .login-panel {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .login-shell {
+    min-height: 50vh;
+  }
+}
+</style>

@@ -1,0 +1,8 @@
+﻿namespace Backend.Domain.Enums;
+
+public enum SlideshowOrder
+{
+    TitleAsc = 1,
+    TitleDesc = 2,
+    Random = 3
+}

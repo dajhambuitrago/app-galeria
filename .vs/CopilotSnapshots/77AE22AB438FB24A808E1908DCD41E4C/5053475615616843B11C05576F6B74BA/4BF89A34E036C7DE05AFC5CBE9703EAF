@@ -1,0 +1,45 @@
+﻿using Backend.Application.Features.Categories.Commands;
+using Backend.Application.Features.Categories.Queries;
+using Backend.WebAPI.Extensions;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Backend.WebAPI.Controllers;
+
+[ApiController]
+[Route("api/categories")]
+public class CategoriesController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [Authorize(Roles = "User,Admin")]
+    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetCategoriesQuery(), cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Create(CreateCategoryCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Update(Guid id, UpdateCategoryCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { Id = id }, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new DeleteCategoryCommand(id), cancellationToken);
+        return this.ToActionResult(result);
+    }
+}

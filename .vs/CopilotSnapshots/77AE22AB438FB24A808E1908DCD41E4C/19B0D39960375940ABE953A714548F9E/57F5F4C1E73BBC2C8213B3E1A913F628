@@ -1,0 +1,9 @@
+﻿using Backend.Domain.Entities;
+
+namespace Backend.Application.Abstractions.Repositories;
+
+public interface ISettingRepository
+{
+    Task<AppSetting?> GetAsync(CancellationToken cancellationToken);
+    Task<AppSetting> UpsertSlideshowDurationAsync(int slideshowDurationSeconds, CancellationToken cancellationToken);
+}

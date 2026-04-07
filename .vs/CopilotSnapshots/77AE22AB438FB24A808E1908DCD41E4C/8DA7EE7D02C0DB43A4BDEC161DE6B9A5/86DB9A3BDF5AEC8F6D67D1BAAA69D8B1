@@ -1,0 +1,84 @@
+﻿import { computed, ref, type Ref } from 'vue'
+import type { MediaDto } from '@/types/api'
+
+export function useSlideshowPlayer(
+  mediaItems: Readonly<Ref<MediaDto[]>>,
+  slideshowDurationSeconds: Readonly<Ref<number>>,
+) {
+  const activeIndex = ref<number | null>(null)
+  const isPlaying = ref(false)
+  let slideshowTimer: number | undefined
+
+  const activeItem = computed(() =>
+    activeIndex.value === null ? null : (mediaItems.value[activeIndex.value] ?? null),
+  )
+
+  function clearSlideshowTimer() {
+    if (slideshowTimer) {
+      window.clearInterval(slideshowTimer)
+      slideshowTimer = undefined
+    }
+  }
+
+  function openItem(index: number) {
+    if (index < 0 || index >= mediaItems.value.length) return
+    activeIndex.value = index
+  }
+
+  function openFirst() {
+    if (mediaItems.value.length === 0) return
+    openItem(0)
+  }
+
+  function closeViewer() {
+    isPlaying.value = false
+    clearSlideshowTimer()
+    activeIndex.value = null
+  }
+
+  function nextItem() {
+    if (mediaItems.value.length === 0 || activeIndex.value === null) return
+    activeIndex.value = (activeIndex.value + 1) % mediaItems.value.length
+  }
+
+  function prevItem() {
+    if (mediaItems.value.length === 0 || activeIndex.value === null) return
+    activeIndex.value = (activeIndex.value - 1 + mediaItems.value.length) % mediaItems.value.length
+  }
+
+  function togglePlay() {
+    if (activeIndex.value === null || mediaItems.value.length === 0) return
+
+    isPlaying.value = !isPlaying.value
+    clearSlideshowTimer()
+
+    if (isPlaying.value) {
+      slideshowTimer = window.setInterval(() => {
+        nextItem()
+      }, slideshowDurationSeconds.value * 1000)
+    }
+  }
+
+  function syncWithMediaItems() {
+    if (activeIndex.value !== null && activeIndex.value >= mediaItems.value.length) {
+      closeViewer()
+    }
+  }
+
+  function dispose() {
+    clearSlideshowTimer()
+  }
+
+  return {
+    activeItem,
+    isPlaying,
+    openItem,
+    openFirst,
+    closeViewer,
+    nextItem,
+    prevItem,
+    togglePlay,
+    syncWithMediaItems,
+    dispose,
+  }
+}

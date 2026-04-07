@@ -1,0 +1,18 @@
+﻿using AutoMapper;
+using Backend.Application.Abstractions.Repositories;
+using Backend.Application.DTOs;
+using Backend.Domain.Common;
+using MediatR;
+
+namespace Backend.Application.Features.Categories.Queries;
+
+public record GetCategoriesQuery() : IRequest<Result<List<CategoryDto>>>;
+
+public class GetCategoriesQueryHandler(ICategoryRepository repository, IMapper mapper) : IRequestHandler<GetCategoriesQuery, Result<List<CategoryDto>>>
+{
+    public async Task<Result<List<CategoryDto>>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
+    {
+        var categories = await repository.GetAllAsync(cancellationToken);
+        return Result<List<CategoryDto>>.Success(mapper.Map<List<CategoryDto>>(categories));
+    }
+}

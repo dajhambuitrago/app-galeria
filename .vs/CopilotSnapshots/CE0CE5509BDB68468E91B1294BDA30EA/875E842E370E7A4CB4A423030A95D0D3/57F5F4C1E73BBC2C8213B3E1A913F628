@@ -1,0 +1,8 @@
+﻿using Backend.Domain.Entities;
+
+namespace Backend.Application.Abstractions.Repositories;
+
+public interface ISettingRepository
+{
+    Task<AppSetting?> GetAsync(CancellationToken cancellationToken);
+}

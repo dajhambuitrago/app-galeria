@@ -1,0 +1,103 @@
+﻿using Backend.Domain.Entities;
+using Backend.Domain.Enums;
+using Backend.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+namespace Backend.Infrastructure.Identity;
+
+public static class IdentitySeeder
+{
+    public static async Task SeedAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        await context.Database.EnsureCreatedAsync();
+
+        var roles = new[] { "Admin", "User" };
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+            }
+        }
+
+        var adminEmail = "admin@appgaleria.local";
+        var admin = await userManager.FindByEmailAsync(adminEmail);
+        if (admin is null)
+        {
+            admin = new ApplicationUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                EmailConfirmed = true
+            };
+
+            await userManager.CreateAsync(admin, "Admin123!");
+            await userManager.AddToRoleAsync(admin, "Admin");
+        }
+
+        if (!await context.Categories.AnyAsync())
+        {
+            context.Categories.AddRange(
+                new Category { Id = Guid.NewGuid(), Name = "Hoteles" },
+                new Category { Id = Guid.NewGuid(), Name = "Restaurantes" },
+                new Category { Id = Guid.NewGuid(), Name = "Parques" });
+
+            await context.SaveChangesAsync();
+        }
+
+        if (!await context.MediaItems.AnyAsync())
+        {
+            var hoteles = await context.Categories.FirstAsync(x => x.Name == "Hoteles");
+            var restaurantes = await context.Categories.FirstAsync(x => x.Name == "Restaurantes");
+            var parques = await context.Categories.FirstAsync(x => x.Name == "Parques");
+
+            context.MediaItems.AddRange(
+                new MediaItem
+                {
+                    Id = Guid.NewGuid(),
+                    Title = "Hotel Vista Mar",
+                    Url = "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80",
+                    Type = MediaType.Image,
+                    CategoryId = hoteles.Id
+                },
+                new MediaItem
+                {
+                    Id = Guid.NewGuid(),
+                    Title = "Restaurante Terraza",
+                    Url = "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1200&q=80",
+                    Type = MediaType.Image,
+                    CategoryId = restaurantes.Id
+                },
+                new MediaItem
+                {
+                    Id = Guid.NewGuid(),
+                    Title = "Parque Central",
+                    Url = "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=80",
+                    Type = MediaType.Image,
+                    CategoryId = parques.Id
+                },
+                new MediaItem
+                {
+                    Id = Guid.NewGuid(),
+                    Title = "Video promocional destino",
+                    Url = "https://www.w3schools.com/html/mov_bbb.mp4",
+                    Type = MediaType.Video,
+                    CategoryId = parques.Id
+                });
+        }
+
+        if (!await context.AppSettings.AnyAsync())
+        {
+            context.AppSettings.Add(new AppSetting { SlideshowDurationSeconds = 8 });
+        }
+
+        await context.SaveChangesAsync();
+    }
+}

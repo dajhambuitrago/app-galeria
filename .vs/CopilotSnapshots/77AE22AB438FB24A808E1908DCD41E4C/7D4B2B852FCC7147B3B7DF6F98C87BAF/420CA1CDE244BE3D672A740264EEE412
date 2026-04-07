@@ -1,0 +1,22 @@
+﻿using Backend.Application.Abstractions.Repositories;
+using Backend.Application.DTOs;
+using Backend.Domain.Common;
+using MediatR;
+
+namespace Backend.Application.Features.Settings.Queries;
+
+public record GetSlideshowDurationQuery : IRequest<Result<SettingDto>>;
+
+public class GetSlideshowDurationQueryHandler(ISettingRepository repository) : IRequestHandler<GetSlideshowDurationQuery, Result<SettingDto>>
+{
+    public async Task<Result<SettingDto>> Handle(GetSlideshowDurationQuery request, CancellationToken cancellationToken)
+    {
+        var settings = await repository.GetAsync(cancellationToken);
+        if (settings is null)
+        {
+            return Result<SettingDto>.Failure("Configuración no encontrada.");
+        }
+
+        return Result<SettingDto>.Success(new SettingDto(settings.SlideshowDurationSeconds));
+    }
+}

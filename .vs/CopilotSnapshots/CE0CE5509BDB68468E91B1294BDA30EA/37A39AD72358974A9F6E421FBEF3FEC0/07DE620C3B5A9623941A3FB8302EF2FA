@@ -1,0 +1,10 @@
+﻿using Backend.Domain.Enums;
+
+namespace Backend.WebAPI.Contracts.Slideshow;
+
+public class SelectedSlideshowRequest
+{
+    public List<Guid> MediaIds { get; set; } = new();
+    public SlideshowOrder Order { get; set; } = SlideshowOrder.TitleAsc;
+    public bool PreserveSelectionOrder { get; set; } = true;
+}
